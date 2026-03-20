@@ -1,17 +1,57 @@
-# raak
+# RAAK
 
-A new Flutter project.
+Party finger-chooser app. Place fingers on screen — RAAK picks the winner.
 
-## Getting Started
+## Features
 
-This project is a starting point for a Flutter application.
+- 2–10 players simultaneously on one screen
+- 6 game modes: Winner, Loser, Multi-Winner, Teams, Elimination, Chaos Control
+- High-energy "Thumbnail Chaos" visual identity
+- Explicitly disclosed Chaos Control mode (never hidden)
+- Haptic feedback + sound toggle
+- In-memory round history (last 5 rounds)
 
-A few resources to get you started if this is your first Flutter project:
+## Run
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```bash
+flutter pub get
+flutter run
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Requirements
+
+- Flutter 3.x
+- Dart SDK >=3.0.0
+- iOS 14+ or Android API 21+
+
+## Test
+
+```bash
+flutter test
+```
+
+All 14 unit tests cover randomness engine and game session state machine.
+
+## Architecture
+
+- **Framework:** Flutter + Riverpod StateNotifier
+- **Touch:** Raw pointer events via `Listener` widget (not GestureDetector)
+- **State:** `GameSessionNotifier` is the single source of truth for game state
+- **Randomness:** Isolated in `lib/core/randomness.dart` — fair Fisher-Yates shuffle
+- **Design:** Thumbnail Chaos aesthetic — volt/shock/mint/blast color system
+
+## Chaos Control
+
+Chaos Control is an explicitly disclosed, opt-in mode that allows the host to influence results. It is **never** a hidden mechanic:
+
+- OFF by default
+- Must be deliberately activated in Mode Select
+- Hazard-stripe banner visible on arena and result screens when active
+- See `lib/core/randomness.dart` for the ethical code comment
+
+## Known Limitations (v1)
+
+- History is in-memory — lost on app restart
+- No tablet-optimized layout
+- Dark mode only
+- Screenshot-shareable result card deferred to v1.1
