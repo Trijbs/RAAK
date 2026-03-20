@@ -42,6 +42,7 @@ class _ArenaScreenState extends ConsumerState<ArenaScreen> {
   }
 
   void _onPointerMove(PointerMoveEvent event) {
+    if (_isLocked) return;
     ref.read(gameSessionProvider.notifier)
         .updatePlayerPosition(event.pointer, event.localPosition);
   }
@@ -88,7 +89,8 @@ class _ArenaScreenState extends ConsumerState<ArenaScreen> {
     if (!mounted) return;
     ref.read(hapticsProvider).reveal();
     ref.read(gameSessionProvider.notifier).reveal();
-    if (mounted) Navigator.pushNamed(context, '/reveal');
+    final result = ref.read(gameSessionProvider).result;
+    if (mounted && result != null) Navigator.pushNamed(context, '/reveal');
   }
 
   @override

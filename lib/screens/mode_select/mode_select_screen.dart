@@ -175,7 +175,12 @@ class _ModeSelectState extends ConsumerState<ModeSelectScreen> {
           Navigator.pop(context);
         },
       ),
-    );
+    ).then((_) {
+      // If the sheet was swiped away without configuration, reset to winner
+      if (_selectedMode == GameMode.chaos && _chaosConfig == null) {
+        setState(() => _selectedMode = GameMode.winner);
+      }
+    });
   }
 
   void _startGame() {
