@@ -230,26 +230,28 @@ class _ChaosConfigSheetState extends State<_ChaosConfigSheet> {
             onChanged: (v) => setState(() => _type = v!),
           )),
           const SizedBox(height: 12),
-          Text('WELKE VINGER (volgorde)?', style: RaakTextStyles.caption),
-          const SizedBox(height: 8),
-          Row(
-            children: List.generate(5, (i) => GestureDetector(
-              onTap: () => setState(() => _targetArrival = i),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                margin: const EdgeInsets.only(right: 8),
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: _targetArrival == i ? RaakColors.blast : RaakColors.surface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: RaakColors.borderDark),
+          if (_type != ChaosTargetType.weightedOdds) ...[
+            Text('WELKE VINGER (volgorde)?', style: RaakTextStyles.caption),
+            const SizedBox(height: 8),
+            Row(
+              children: List.generate(5, (i) => GestureDetector(
+                onTap: () => setState(() => _targetArrival = i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  margin: const EdgeInsets.only(right: 8),
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: _targetArrival == i ? RaakColors.blast : RaakColors.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: RaakColors.borderDark),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text('${i + 1}', style: RaakTextStyles.body),
                 ),
-                alignment: Alignment.center,
-                child: Text('${i + 1}', style: RaakTextStyles.body),
-              ),
-            )),
-          ),
+              )),
+            ),
+          ],
           const SizedBox(height: 20),
           Row(
             children: [
