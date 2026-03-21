@@ -12,6 +12,7 @@ dependencies:
   flutter_riverpod: ^2.6.1
   uuid: ^4.3.3
   audioplayers: ^6.0.0
+  shared_preferences: ^2.2.0
 
 dev_dependencies:
   flutter_test:
