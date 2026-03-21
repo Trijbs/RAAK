@@ -6,6 +6,9 @@ import '../../providers/game_session_provider.dart';
 import '../../providers/history_provider.dart';
 import '../../widgets/finger_bubble.dart';
 import '../../widgets/result_card.dart';
+import '../../models/match.dart';
+import '../../providers/match_provider.dart';
+import '../../providers/dare_provider.dart';
 
 class RevealScreen extends ConsumerStatefulWidget {
   const RevealScreen({super.key});
@@ -41,6 +44,28 @@ class _RevealScreenState extends ConsumerState<RevealScreen>
             HistoryEntry(mode: session.mode, result: session.result!),
           );
           _hasRecordedHistory = true;
+
+          // Record match selection if party mode is active
+          final matchState = ref.read(matchProvider);
+          if (matchState != null && matchState.isActive) {
+            final result = session.result!;
+            final isWinnerMode =
+                matchState.config.outcomeType == MatchOutcomeType.winner;
+            final selectedSlot = isWinnerMode
+                ? result.winners.first.arrivalIndex
+                : result.losers.first.arrivalIndex;
+            ref.read(matchProvider.notifier).recordSelection(selectedSlot);
+
+            // Navigate to match summary if match is decided
+            final updated = ref.read(matchProvider);
+            if (updated != null && !updated.isActive && mounted) {
+              Navigator.pushReplacementNamed(
+                context,
+                '/match-summary',
+                arguments: updated,
+              );
+            }
+          }
         }
       }
     });
@@ -80,6 +105,53 @@ class _RevealScreenState extends ConsumerState<RevealScreen>
               child: ResultCard(result: result, mode: session.mode),
             ),
             const SizedBox(height: 24),
+            Consumer(
+              builder: (context, ref, _) {
+                final matchState = ref.watch(matchProvider);
+                if (matchState == null || !matchState.isActive) {
+                  return const SizedBox.shrink();
+                }
+                final isWinnerMode =
+                    matchState.config.outcomeType == MatchOutcomeType.winner;
+                final label = isWinnerMode ? 'WINS' : 'VERLIESPUNTEN';
+                final slots = matchState.tally.keys.toList()..sort();
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: RaakColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: RaakColors.borderDark),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(label, style: RaakTextStyles.caption),
+                        const SizedBox(width: 12),
+                        ...slots.map((s) => Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Text(
+                                'P${s + 1}: ${matchState.tally[s] ?? 0}',
+                                style: RaakTextStyles.body
+                                    .copyWith(fontSize: 14),
+                              ),
+                            )),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Text(
+                            '/ ${matchState.config.winTarget}',
+                            style: RaakTextStyles.caption,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
             if (session.activePlayers.isNotEmpty)
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -126,6 +198,7 @@ class _RevealScreenState extends ConsumerState<RevealScreen>
                       decoration: RaakButtonStyle.primary(),
                       textColor: RaakColors.textDark,
                       onTap: () {
+                        ref.read(matchProvider.notifier).endMatch();
                         ref.read(gameSessionProvider.notifier).resetFull();
                         Navigator.pushNamedAndRemoveUntil(
                           context,
@@ -158,6 +231,52 @@ class _RevealScreenState extends ConsumerState<RevealScreen>
                 ),
               ),
             ],
+            Consumer(
+              builder: (context, ref, _) {
+                final result = ref.watch(gameSessionProvider).result;
+                if (result == null || result.losers.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                final dares = ref.watch(dareProvider);
+                final hasEnabledDares = dares.any((d) => d.isEnabled);
+                if (!hasEnabledDares) return const SizedBox.shrink();
+                return Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: GestureDetector(
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          '/dare',
+                          arguments: result.losers.first.arrivalIndex,
+                        ),
+                        child: Container(
+                          width: double.infinity,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color:
+                                RaakColors.blast.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: RaakColors.blast, width: 2),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'GEEF OPDRACHT',
+                            style: RaakTextStyles.body.copyWith(
+                              color: RaakColors.blast,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
             const SizedBox(height: 24),
           ],
         ),
