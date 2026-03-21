@@ -282,7 +282,7 @@ class _AddDareSheetState extends State<_AddDareSheet> {
                 final text = _controller.text.trim();
                 if (text.isNotEmpty) {
                   widget.notifier.addCustom(text);
-                  Navigator.pop(context);
+                  if (mounted) Navigator.pop(context);
                 }
               },
               child: Container(
