@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/theme.dart';
 
 class Player {
   final String id;           // UUID, generated at touch-down
@@ -27,5 +28,19 @@ class Player {
     nickname: nickname ?? this.nickname,
     arrivalIndex: arrivalIndex,
     position: position ?? this.position,
+  );
+
+  Map<String, dynamic> toHistoryJson() => {
+    'arrivalIndex': arrivalIndex,
+    'nickname': nickname,
+  };
+
+  factory Player.fromHistoryJson(Map<String, dynamic> j) => Player(
+    id: 'restored_${j['arrivalIndex']}',
+    pointerId: 0,
+    color: RaakColors.playerColor(j['arrivalIndex'] as int),
+    nickname: j['nickname'] as String,
+    arrivalIndex: j['arrivalIndex'] as int,
+    position: Offset.zero,
   );
 }
