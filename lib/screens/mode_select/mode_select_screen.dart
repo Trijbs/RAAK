@@ -4,6 +4,8 @@ import '../../core/theme.dart';
 import '../../models/game_session.dart';
 import '../../providers/game_session_provider.dart';
 import '../../widgets/chaos_banner.dart';
+import '../../models/match.dart';
+import '../../providers/match_provider.dart';
 
 class ModeSelectScreen extends ConsumerStatefulWidget {
   const ModeSelectScreen({super.key});
@@ -17,6 +19,8 @@ class _ModeSelectState extends ConsumerState<ModeSelectScreen> {
   int _multiWinnerCount = 2;
   int _teamCount = 2;
   ChaosConfig? _chaosConfig;
+  bool _partyModeEnabled = false;
+  int _winTarget = 3; // 2 = Best of 3, 3 = Best of 5, 4 = Best of 7
 
   static const _modes = [
     (mode: GameMode.winner, label: 'WINNAAR', subtitle: '1 willekeurige winnaar', color: RaakColors.volt),
@@ -99,6 +103,8 @@ class _ModeSelectState extends ConsumerState<ModeSelectScreen> {
                 },
               ),
             ),
+            if (_selectedMode == GameMode.winner || _selectedMode == GameMode.loser)
+              _buildPartyModeSection(),
             if (_selectedMode == GameMode.chaos && _chaosConfig != null)
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
@@ -184,6 +190,17 @@ class _ModeSelectState extends ConsumerState<ModeSelectScreen> {
   }
 
   void _startGame() {
+    if (_partyModeEnabled &&
+        (_selectedMode == GameMode.winner || _selectedMode == GameMode.loser)) {
+      ref.read(matchProvider.notifier).startMatch(MatchConfig(
+        winTarget: _winTarget,
+        outcomeType: _selectedMode == GameMode.winner
+            ? MatchOutcomeType.winner
+            : MatchOutcomeType.loser,
+      ));
+    } else {
+      ref.read(matchProvider.notifier).endMatch();
+    }
     ref.read(gameSessionProvider.notifier).startSession(
       _selectedMode,
       multiWinnerCount: _multiWinnerCount,
@@ -191,6 +208,77 @@ class _ModeSelectState extends ConsumerState<ModeSelectScreen> {
       chaosConfig: _selectedMode == GameMode.chaos ? _chaosConfig : null,
     );
     Navigator.pushNamed(context, '/arena');
+  }
+
+  Widget _buildPartyModeSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: RaakColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: RaakColors.borderDark),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('PARTY MODE', style: RaakTextStyles.body),
+                  subtitle: Text('Speel meerdere rondes', style: RaakTextStyles.caption),
+                  value: _partyModeEnabled,
+                  activeColor: RaakColors.volt,
+                  onChanged: (v) => setState(() => _partyModeEnabled = v),
+                ),
+                if (_partyModeEnabled) ...[
+                  const Divider(color: RaakColors.borderDark),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildWinTargetChip(label: 'Best of 3', value: 2),
+                        _buildWinTargetChip(label: 'Best of 5', value: 3),
+                        _buildWinTargetChip(label: 'Best of 7', value: 4),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWinTargetChip({required String label, required int value}) {
+    final selected = _winTarget == value;
+    return GestureDetector(
+      onTap: () => setState(() => _winTarget = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? RaakColors.volt.withValues(alpha: 0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? RaakColors.volt : RaakColors.borderDark,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: RaakTextStyles.caption.copyWith(
+            color: selected ? RaakColors.volt : RaakColors.textGrey,
+          ),
+        ),
+      ),
+    );
   }
 }
 
