@@ -37,7 +37,9 @@ class _RevealScreenState extends ConsumerState<RevealScreen>
       if (!_hasRecordedHistory && mounted) {
         final session = ref.read(gameSessionProvider);
         if (session.result != null) {
-          ref.read(historyProvider.notifier).addRound(session.mode, session.result!);
+          ref.read(historyProvider.notifier).addRound(
+            HistoryEntry(mode: session.mode, result: session.result!),
+          );
           _hasRecordedHistory = true;
         }
       }
