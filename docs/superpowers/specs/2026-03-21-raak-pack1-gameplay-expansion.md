@@ -1,7 +1,7 @@
 # RAAK Pack 1 — Gameplay Expansion Design Spec
 
 **Date:** 2026-03-21
-**Version:** 1.0
+**Version:** 1.1
 **Scope:** Best of 5 / Party Mode, Dares, Persistent History
 
 ---
@@ -14,84 +14,122 @@ Pack 1 adds three gameplay features to RAAK v1 without touching the existing gam
 
 ## 2. Architecture Principle
 
-The existing `game_session_provider.dart`, `arena_screen.dart`, and `randomness.dart` are **not modified**. All new features wrap around or hook into the existing flow at well-defined seams (mode select config, post-reveal navigation, settings screen, history provider).
+The core game engine files (`game_session_provider.dart`, `arena_screen.dart`, `randomness.dart`) are **not modified**. All new features wrap around or hook into the existing flow at well-defined seams: mode select config, post-reveal navigation, settings screen, and history provider.
+
+**Files that WILL be modified:**
+- `lib/providers/history_provider.dart` — add persistence + `HistoryEntry` model + cap change (5 → 25)
+- `lib/screens/mode_select/mode_select_screen.dart` — add party mode toggle
+- `lib/screens/reveal/reveal_screen.dart` — add score tally, dare button, match navigation
+- `lib/screens/settings/settings_screen.dart` — add dare management section
+- `lib/app.dart` — change routing from static `routes` map to `onGenerateRoute` to support route arguments
 
 ---
 
 ## 3. Feature: Best of 5 / Party Mode
 
-### 3a. Model — `lib/models/match.dart`
+### 3a. Scope
+
+Party Mode is available for `GameMode.winner` and `GameMode.loser` only. `GameMode.chaos`, `multiWinner`, `teams`, and `elimination` are excluded in Pack 1.
+
+- **Winner mode party:** track wins per slot. First slot to reach `winTarget` wins the match.
+- **Loser mode party:** track losses per slot. First slot to reach `winTarget` losses is the match loser (shown on match summary with blast/shock color, not volt).
+
+### 3b. Model — `lib/models/match.dart`
 
 ```dart
+enum MatchOutcomeType { winner, loser }
+
 class MatchConfig {
-  final int winTarget; // 2 = Best of 3, 3 = Best of 5, 4 = Best of 7
-  const MatchConfig({required this.winTarget});
+  final int winTarget;              // 2 = Best of 3, 3 = Best of 5, 4 = Best of 7
+  final MatchOutcomeType outcomeType; // mirrors the game mode
+  const MatchConfig({required this.winTarget, required this.outcomeType});
 }
 
 class MatchState {
   final MatchConfig config;
-  final int roundNumber;          // starts at 1
-  final Map<int, int> scores;     // playerSlot -> wins
-  final int? matchWinner;         // slot index, null until match decided
+  final int roundNumber;            // starts at 1
+  final Map<int, int> tally;        // slot -> wins (winner mode) or losses (loser mode)
+  final int? matchDecidedSlot;      // slot that won/lost the match; null until decided
 
   const MatchState({
     required this.config,
     this.roundNumber = 1,
-    this.scores = const {},
-    this.matchWinner,
+    this.tally = const {},
+    this.matchDecidedSlot,
   });
 
-  bool get isActive => matchWinner == null;
+  bool get isActive => matchDecidedSlot == null;
 
-  MatchState recordWin(int slot) {
-    final newScores = Map<int, int>.from(scores);
-    newScores[slot] = (newScores[slot] ?? 0) + 1;
-    final winner = newScores[slot]! >= config.winTarget ? slot : null;
+  MatchState recordSelection(int slot) {
+    final newTally = Map<int, int>.from(tally);
+    newTally[slot] = (newTally[slot] ?? 0) + 1;
+    final decided = newTally[slot]! >= config.winTarget ? slot : null;
     return MatchState(
       config: config,
       roundNumber: roundNumber + 1,
-      scores: newScores,
-      matchWinner: winner,
+      tally: newTally,
+      matchDecidedSlot: decided,
     );
   }
 }
 ```
 
-### 3b. Provider — `lib/providers/match_provider.dart`
+`recordSelection(slot)` is called with:
+- **Winner mode:** `result.winners.first.arrivalIndex`
+- **Loser mode:** `result.losers.first.arrivalIndex`
 
-`MatchNotifier extends StateNotifier<MatchState?>`. Null state = no active match (normal single-round play).
+Both are guaranteed to be non-null when party mode is active (winner/loser modes always produce exactly one winner or one loser).
+
+### 3c. Provider — `lib/providers/match_provider.dart`
+
+`MatchNotifier extends StateNotifier<MatchState?>`. Null = no active match.
 
 Methods:
-- `startMatch(MatchConfig config)` — initialises a fresh `MatchState`
-- `recordRoundResult(int winnerSlot)` — calls `MatchState.recordWin`, updates state
-- `endMatch()` — resets to null
+- `startMatch(MatchConfig config)` — initialises fresh `MatchState`
+- `recordSelection(int slot)` — delegates to `MatchState.recordSelection`, updates state
+- `endMatch()` — resets state to null
 
-### 3c. Mode Select Changes
+### 3d. Mode Select Changes
 
-When `GameMode.winner` or `GameMode.loser` is selected, a **"PARTY MODE"** toggle row appears below the mode card. When enabled, a row of three chips appears: **Best of 3 / Best of 5 / Best of 7** (default: Best of 5).
+When `GameMode.winner` or `GameMode.loser` is selected, a **"PARTY MODE"** toggle row appears below the mode card. When enabled, a row of three chips appears: **Best of 3 / Best of 5 / Best of 7** (default: Best of 5, i.e. `winTarget: 3`).
 
-The selected `MatchConfig` is passed into `_startGame()` and handed to `MatchNotifier.startMatch()` before navigating to `/arena`.
+In `_startGame()`:
+```dart
+if (_partyModeEnabled) {
+  ref.read(matchProvider.notifier).startMatch(MatchConfig(
+    winTarget: _winTarget,
+    outcomeType: _selectedMode == GameMode.winner
+        ? MatchOutcomeType.winner
+        : MatchOutcomeType.loser,
+  ));
+} else {
+  ref.read(matchProvider.notifier).endMatch();
+}
+```
 
-### 3d. Reveal Screen Changes
+### 3e. Reveal Screen Changes
 
 When `matchProvider` is non-null and active:
-- Below the result card, a compact **score tally** row is shown (e.g. "Speler 1: 2 — Speler 3: 1 — Speler 2: 0")
-- The **REMATCH** button continues the current match (calls `gameSessionProvider.notifier.startSession()` with same config, does NOT reset match)
-- **NIEUWE RONDE** resets the match entirely (`matchProvider.notifier.endMatch()`)
 
-After `reveal()`, if `matchProvider.recordRoundResult(winnerSlot)` causes `matchWinner != null`, navigation goes to `/match-summary` instead of staying on reveal.
+1. Call `matchProvider.notifier.recordSelection(selectedSlot)` immediately after `reveal()` returns. `selectedSlot` is derived as described in Section 3b.
+2. Below the result card, show a compact **score tally** row. For winner mode label it "WINS", for loser mode label it "VERLIESPUNTEN".
+3. **REMATCH** continues the current match (does not reset match state).
+4. **NIEUWE RONDE** calls `matchProvider.notifier.endMatch()` and returns to home.
 
-### 3e. Match Summary Screen — `lib/screens/match_summary/match_summary_screen.dart`
+If `matchState.matchDecidedSlot != null` after recording, navigate to `/match-summary` (passing `matchState` as argument) instead of staying on reveal.
 
-Full-screen result showing:
-- Champion slot highlighted with volt/winner color and a large sticker label ("KAMPIOEN")
-- Full score breakdown table for all slots
-- **NIEUW SPEL** button — ends match, returns to home
-- **NIEUWE RONDE** button — ends match, goes to mode select
+### 3f. Match Summary Screen — `lib/screens/match_summary/match_summary_screen.dart`
 
-### 3f. Player Identity
+Full-screen result:
+- **Winner mode:** champion slot highlighted with `RaakColors.volt`, large sticker label "KAMPIOEN"
+- **Loser mode:** decided slot highlighted with `RaakColors.blast`, large sticker label "VERLIEZER"
+- Full tally table for all slots
+- **NIEUW SPEL** — calls `endMatch()`, navigates to home
+- **NIEUWE RONDE** — calls `endMatch()`, navigates to mode select
 
-Player identity is by arrival order (slot index, 0-based), consistent with v1 color assignment (`RaakColors.playerColor(index)`). No new nickname system in Pack 1.
+### 3g. Player Identity
+
+Player identity uses `arrivalIndex` (0-based slot), consistent with v1 color assignment via `RaakColors.playerColor(index)`.
 
 ---
 
@@ -123,9 +161,10 @@ class Dare {
   };
 
   factory Dare.fromJson(Map<String, dynamic> j) => Dare(
-    id: j['id'], text: j['text'],
-    isCustom: j['isCustom'] ?? false,
-    isEnabled: j['isEnabled'] ?? true,
+    id: j['id'] as String,
+    text: j['text'] as String,
+    isCustom: j['isCustom'] as bool? ?? false,
+    isEnabled: j['isEnabled'] as bool? ?? true,
   );
 }
 ```
@@ -141,89 +180,173 @@ class Dare {
 - "Doe een dans die iedereen moet natansen"
 - "Spreek de rest van de ronde met een accent"
 - "Geef iemand een compliment dat je normaal nooit zou zeggen"
+- "Laat iemand anders je telefoon één minuut vasthouden"
+- "Doe 30 seconden lang niets en zeg niets"
 
-Full list defined as a `const List<Dare>` in this file.
+(Full 40 defined as `const List<Dare>` in this file — implementer fills out to 40.)
 
 ### 4c. Provider — `lib/providers/dare_provider.dart`
 
-`DareNotifier extends StateNotifier<List<Dare>>`. On construction, loads built-in list merged with persisted custom dares and toggle states from SharedPreferences.
+`DareNotifier extends StateNotifier<List<Dare>>`. On construction:
+1. Load built-in dares from `dares_data.dart`
+2. Load persisted JSON from SharedPreferences key `raak_dares_v1`
+3. Merge: for each built-in dare, apply saved `isEnabled` state if present; append any saved custom dares
 
 Methods:
-- `drawRandom()` — returns a random enabled `Dare` (Fisher-Yates on enabled subset); null if none enabled
-- `drawAgain(String excludeId)` — returns a random enabled dare that is not `excludeId`
-- `addCustom(String text)` — creates a dare with `isCustom: true`, UUID id, appends and persists
+- `drawRandom()` → `Dare?` — random enabled dare; returns null if 0 enabled
+- `drawAgain(String excludeId)` → `Dare?` — random enabled dare excluding `excludeId`; returns null if fewer than 2 enabled
+- `addCustom(String text)` — UUID id (`custom_${DateTime.now().millisecondsSinceEpoch}`), appends, persists
 - `toggle(String id)` — flips `isEnabled`, persists
-- `deleteCustom(String id)` — removes custom dare, persists (built-in dares cannot be deleted)
+- `deleteCustom(String id)` — only removes if `isCustom == true`, persists
 
-Persistence key: `raak_dares_v1` (JSON array of all dares with their current `isEnabled` state).
+Persistence: serialize full list to JSON, write to `raak_dares_v1`.
 
 ### 4d. Dare Overlay Screen — `lib/screens/dare_overlay/dare_overlay_screen.dart`
 
-Full-screen push route `/dare`. Receives the loser's player slot index as a route argument.
+Full-screen push route `/dare`. Receives `int loserSlot` as route argument.
 
-Layout:
+On build, calls `dareProvider.notifier.drawRandom()` once and stores in local state.
+
+**Edge cases:**
+- If `drawRandom()` returns null (0 enabled dares): show a centered message "GEEN OPDRACHTEN INGESTELD" with a "TERUG" button that pops the route.
+- If `drawAgain()` returns null (fewer than 2 enabled dares): the "VOLGENDE" button is disabled from the start.
+
+Layout (normal case):
 - Background: `RaakColors.voidBlack`
-- Top: small caption "OPDRACHT VOOR SPELER X"
-- Center: large dare card styled with `RaakColors.blast` border and hard shadow
-- Dare text in `RaakTextStyles.modeTitle` (large, bold)
-- Bottom row: ghost button **"VOLGENDE"** (one redraw allowed per round, then disabled) + primary button **"GEDAAN"**
-
-Navigation: **"GEDAAN"** pops back to reveal screen.
+- Top caption: "OPDRACHT VOOR SPELER ${loserSlot + 1}"
+- Center: large dare card with `RaakColors.blast` border and hard shadow
+- Dare text in `RaakTextStyles.modeTitle`
+- Bottom row: ghost **"VOLGENDE"** button (one redraw; disabled after use or if only 1 dare enabled) + primary **"GEDAAN"** button
+- **"GEDAAN"** pops back to reveal screen
 
 ### 4e. Reveal Screen Changes
 
-After the result is shown, if the result contains a loser (modes: loser, winner with loser slot, elimination), a **"GEEF OPDRACHT"** secondary button appears below the main action buttons. Tapping it pushes `/dare` with the loser's slot index.
+After the result is shown, if result contains a loser (`result.losers.isNotEmpty`), show a **"GEEF OPDRACHT"** secondary button.
+
+**"GEEF OPDRACHT" button visibility:**
+- Hidden if `dareProvider` has 0 enabled dares (i.e. `dareProvider.where((d) => d.isEnabled).isEmpty`)
+- Otherwise visible, tapping pushes `/dare` with `result.losers.first.arrivalIndex`
 
 ### 4f. Settings Screen Changes
 
-New section **"OPDRACHTEN"** added to settings screen:
-- List of all dares (built-in and custom) with a toggle switch per dare
-- Built-in dares show a lock icon, no delete button
-- Custom dares show a delete (trash) icon
-- **"OPDRACHT TOEVOEGEN"** button at the bottom opens a bottom sheet with a text field and confirm button
+New section **"OPDRACHTEN"** added:
+- List of all dares with a toggle switch per dare
+- Built-in dares: no delete button
+- Custom dares: trash icon button to delete
+- **"OPDRACHT TOEVOEGEN"** button opens a bottom sheet with a text field (max 120 chars) and confirm button
 
 ---
 
 ## 5. Feature: Persistent History
 
-### 5a. Serialization
+### 5a. Models with Serialization
 
-`Player` gets `toJson()`/`fromJson()`:
+**`Player`** — history only needs `arrivalIndex` and `nickname`. `pointerId` and `position` are session-only and are NOT persisted.
+
 ```dart
-Map<String, dynamic> toJson() => {'id': id, 'nickname': nickname, 'colorIndex': colorIndex};
-factory Player.fromJson(Map<String, dynamic> j) => Player(id: j['id'], nickname: j['nickname'], colorIndex: j['colorIndex']);
+// Added to Player class:
+Map<String, dynamic> toHistoryJson() => {
+  'arrivalIndex': arrivalIndex,
+  'nickname': nickname,
+};
+
+factory Player.fromHistoryJson(Map<String, dynamic> j) => Player(
+  pointerId: 0,                                  // dummy — not used in history display
+  color: RaakColors.playerColor(j['arrivalIndex'] as int),
+  arrivalIndex: j['arrivalIndex'] as int,
+  position: Offset.zero,                         // dummy
+  nickname: j['nickname'] as String?,
+);
 ```
 
-`GameResult` gets `toJson()`/`fromJson()`. `HistoryEntry` (wrapping mode + result) gets `toJson()`/`fromJson()`.
+**`GameResult`** — needs `winners`, `losers`, `teams`, `wasChaosControlActive`:
+
+```dart
+Map<String, dynamic> toJson() => {
+  'winners': winners.map((p) => p.toHistoryJson()).toList(),
+  'losers': losers.map((p) => p.toHistoryJson()).toList(),
+  'teams': teams.map((t) => t.map((p) => p.toHistoryJson()).toList()).toList(),
+  'wasChaosControlActive': wasChaosControlActive,
+};
+
+factory GameResult.fromJson(Map<String, dynamic> j) => GameResult(
+  winners: (j['winners'] as List).map((e) => Player.fromHistoryJson(e as Map<String, dynamic>)).toList(),
+  losers: (j['losers'] as List).map((e) => Player.fromHistoryJson(e as Map<String, dynamic>)).toList(),
+  teams: (j['teams'] as List).map((t) => (t as List).map((e) => Player.fromHistoryJson(e as Map<String, dynamic>)).toList()).toList(),
+  wasChaosControlActive: j['wasChaosControlActive'] as bool? ?? false,
+);
+```
+
+**`HistoryEntry`** — new class defined inside `history_provider.dart`:
+
+```dart
+class HistoryEntry {
+  final GameMode mode;
+  final GameResult result;
+  const HistoryEntry({required this.mode, required this.result});
+
+  Map<String, dynamic> toJson() => {
+    'mode': mode.name,
+    'result': result.toJson(),
+  };
+
+  factory HistoryEntry.fromJson(Map<String, dynamic> j) => HistoryEntry(
+    mode: GameMode.values.firstWhere((m) => m.name == j['mode']),
+    result: GameResult.fromJson(j['result'] as Map<String, dynamic>),
+  );
+}
+```
 
 ### 5b. HistoryNotifier Changes
+
+The existing anonymous record type `({GameMode mode, GameResult result})` is replaced by `HistoryEntry`. The existing `addRound(GameMode mode, GameResult result)` signature is updated to `addRound(HistoryEntry entry)` — **the one call site in `reveal_screen.dart` must also be updated** (line ~40: change to `ref.read(historyProvider.notifier).addRound(HistoryEntry(mode: session.mode, result: session.result!))`).
+
+History cap changes from 5 to 25. The constant `_maxHistory` in `HistoryNotifier` changes from `5` to `25`.
 
 On init: reads `raak_history_v1` from SharedPreferences, deserializes up to 25 entries.
 
 On `addRound(HistoryEntry entry)`:
-- Prepends entry to list
-- Trims to 25
-- Serializes and writes back to SharedPreferences
+1. Prepend to list
+2. Trim to 25
+3. Serialize and write to SharedPreferences key `raak_history_v1`
 
-### 5c. No UI changes
+### 5c. Home Screen
 
-The existing history bottom sheet on the home screen already handles display. The only change is that entries survive app restart.
+The existing history bottom sheet already handles display. No UI changes needed — it will now show up to 25 entries across app restarts.
 
 ---
 
-## 6. New Routes
+## 6. Routing Changes — `lib/app.dart`
 
-| Route | Screen | Notes |
-|---|---|---|
-| `/dare` | `DareOverlayScreen` | arg: `int` loser slot index |
-| `/match-summary` | `MatchSummaryScreen` | arg: `MatchState` |
+The existing `routes:` map does not support passing arguments to named routes. Change to `onGenerateRoute`:
+
+```dart
+onGenerateRoute: (settings) {
+  switch (settings.name) {
+    case '/': return MaterialPageRoute(builder: (_) => const HomeScreen());
+    case '/mode-select': return MaterialPageRoute(builder: (_) => const ModeSelectScreen());
+    case '/arena': return MaterialPageRoute(builder: (_) => const ArenaScreen());
+    case '/reveal': return MaterialPageRoute(builder: (_) => const RevealScreen());
+    case '/settings': return MaterialPageRoute(builder: (_) => const SettingsScreen());
+    case '/dare':
+      final loserSlot = settings.arguments as int;
+      return MaterialPageRoute(builder: (_) => DareOverlayScreen(loserSlot: loserSlot));
+    case '/match-summary':
+      final matchState = settings.arguments as MatchState;
+      return MaterialPageRoute(builder: (_) => MatchSummaryScreen(matchState: matchState));
+    default: return MaterialPageRoute(builder: (_) => const HomeScreen());
+  }
+},
+```
 
 ---
 
 ## 7. Dependencies
 
 Add to `pubspec.yaml`:
-- `shared_preferences: ^2.2.0` — used by dare provider, history provider, and (already used by) settings provider
+- `shared_preferences: ^2.2.0` — used by `DareNotifier` and `HistoryNotifier`
+
+Note: `settings_provider.dart` is currently in-memory only. It does NOT currently use SharedPreferences. SharedPreferences is a new dependency for Pack 1.
 
 ---
 
@@ -231,9 +354,9 @@ Add to `pubspec.yaml`:
 
 | Test file | What it covers |
 |---|---|
-| `test/match_test.dart` | `MatchState.recordWin`, win detection, round increment |
-| `test/dare_provider_test.dart` | `drawRandom`, `drawAgain` exclusion, `addCustom`, `toggle`, `deleteCustom` |
-| `test/history_persistence_test.dart` | `toJson`/`fromJson` round-trip for `Player`, `GameResult`, `HistoryEntry`; cap at 25 |
+| `test/match_test.dart` | `MatchState.recordSelection`, win/loss detection, round increment, both outcome types |
+| `test/dare_provider_test.dart` | `drawRandom` (returns null when 0 enabled), `drawAgain` exclusion (returns null when <2 enabled), `addCustom`, `toggle`, `deleteCustom` |
+| `test/history_persistence_test.dart` | `toJson`/`fromJson` round-trip for `Player.toHistoryJson`, `GameResult`, `HistoryEntry`; cap at 25 |
 
 Existing tests (`randomness_test.dart`, `game_session_test.dart`) must continue to pass unchanged.
 
@@ -241,7 +364,9 @@ Existing tests (`randomness_test.dart`, `game_session_test.dart`) must continue 
 
 ## 9. Out of Scope for Pack 1
 
+- Party Mode for chaos, multiWinner, teams, elimination modes
 - Nickname editing during a match
 - Per-dare difficulty ratings
+- Settings persistence (sound/vibration toggles across restarts)
 - Cloud sync for history
 - Visual Overhaul (fonts, themes, juice) — Pack 2
