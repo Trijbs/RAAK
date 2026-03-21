@@ -10,7 +10,13 @@ class MatchSummaryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final decided = matchState.matchDecidedSlot!;
+    final decided = matchState.matchDecidedSlot;
+    if (decided == null) {
+      return const Scaffold(
+        backgroundColor: RaakColors.voidBlack,
+        body: Center(child: Text('Geen resultaat', style: RaakTextStyles.caption)),
+      );
+    }
     final isWinnerMode = matchState.config.outcomeType == MatchOutcomeType.winner;
     final highlightColor = isWinnerMode ? RaakColors.volt : RaakColors.blast;
     final labelText = isWinnerMode ? 'KAMPIOEN' : 'VERLIEZER';

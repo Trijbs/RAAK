@@ -52,18 +52,20 @@ class _RevealScreenState extends ConsumerState<RevealScreen>
             final isWinnerMode =
                 matchState.config.outcomeType == MatchOutcomeType.winner;
             final selectedSlot = isWinnerMode
-                ? result.winners.first.arrivalIndex
-                : result.losers.first.arrivalIndex;
-            ref.read(matchProvider.notifier).recordSelection(selectedSlot);
+                ? (result.winners.isEmpty ? null : result.winners.first.arrivalIndex)
+                : (result.losers.isEmpty ? null : result.losers.first.arrivalIndex);
+            if (selectedSlot != null) {
+              ref.read(matchProvider.notifier).recordSelection(selectedSlot);
 
-            // Navigate to match summary if match is decided
-            final updated = ref.read(matchProvider);
-            if (updated != null && !updated.isActive && mounted) {
-              Navigator.pushReplacementNamed(
-                context,
-                '/match-summary',
-                arguments: updated,
-              );
+              // Navigate to match summary if match is decided
+              final updated = ref.read(matchProvider);
+              if (updated != null && !updated.isActive && mounted) {
+                Navigator.pushReplacementNamed(
+                  context,
+                  '/match-summary',
+                  arguments: updated,
+                );
+              }
             }
           }
         }

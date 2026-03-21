@@ -11,6 +11,8 @@ class Dare {
     this.isEnabled = true,
   });
 
+  // Only isEnabled is exposed because built-in dares are immutable.
+  // If custom dare text editing is added in future, expand this method.
   Dare copyWith({bool? isEnabled}) => Dare(
     id: id,
     text: text,

@@ -65,7 +65,7 @@ class _DareOverlayScreenState extends ConsumerState<DareOverlayScreen> {
       );
     }
 
-    final enabledCount = ref.read(dareProvider).where((d) => d.isEnabled).length;
+    final enabledCount = ref.watch(dareProvider).where((d) => d.isEnabled).length;
     final canRedraw = !_hasRedrawn && enabledCount >= 2;
 
     return Scaffold(

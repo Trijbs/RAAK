@@ -20,6 +20,7 @@ class GameResult {
     'losers': losers.map((p) => p.toHistoryJson()).toList(),
     'teams': teams?.map((t) => t.map((p) => p.toHistoryJson()).toList()).toList() ?? [],
     'wasChaosControlActive': wasChaosControlActive,
+    'timestamp': timestamp.millisecondsSinceEpoch,
   };
 
   factory GameResult.fromJson(Map<String, dynamic> j) => GameResult(
@@ -37,6 +38,7 @@ class GameResult {
                 .toList())
             .toList(),
     wasChaosControlActive: j['wasChaosControlActive'] as bool? ?? false,
-    timestamp: DateTime.now(),
+    timestamp: DateTime.fromMillisecondsSinceEpoch(
+        (j['timestamp'] as int?) ?? DateTime.now().millisecondsSinceEpoch),
   );
 }
