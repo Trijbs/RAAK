@@ -122,7 +122,6 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   void _showAddDareSheet(BuildContext context, DareNotifier notifier) {
-    final controller = TextEditingController();
     showModalBottomSheet(
       context: context,
       backgroundColor: RaakColors.surface,
@@ -130,75 +129,7 @@ class SettingsScreen extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 24,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('NIEUWE OPDRACHT', style: RaakTextStyles.caption),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              maxLength: 120,
-              autofocus: true,
-              style: RaakTextStyles.body,
-              decoration: InputDecoration(
-                hintText: 'Typ een opdracht...',
-                hintStyle:
-                    RaakTextStyles.body.copyWith(color: RaakColors.textGrey),
-                filled: true,
-                fillColor: RaakColors.voidBlack,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide:
-                      const BorderSide(color: RaakColors.borderDark),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide:
-                      const BorderSide(color: RaakColors.borderDark),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide:
-                      const BorderSide(color: RaakColors.volt, width: 2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: GestureDetector(
-                onTap: () {
-                  final text = controller.text.trim();
-                  if (text.isNotEmpty) {
-                    notifier.addCustom(text);
-                    Navigator.pop(context);
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: RaakButtonStyle.primary(),
-                  alignment: Alignment.center,
-                  child: Text(
-                    'TOEVOEGEN',
-                    style: RaakTextStyles.body.copyWith(
-                      color: RaakColors.textDark,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => _AddDareSheet(notifier: notifier),
     );
   }
 
@@ -272,6 +203,104 @@ class _DareListTile extends StatelessWidget {
             )
           : const Icon(Icons.lock_outline,
               color: RaakColors.borderDark, size: 16),
+    );
+  }
+}
+
+class _AddDareSheet extends StatefulWidget {
+  final DareNotifier notifier;
+
+  const _AddDareSheet({required this.notifier});
+
+  @override
+  State<_AddDareSheet> createState() => _AddDareSheetState();
+}
+
+class _AddDareSheetState extends State<_AddDareSheet> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('NIEUWE OPDRACHT', style: RaakTextStyles.caption),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            maxLength: 120,
+            autofocus: true,
+            style: RaakTextStyles.body,
+            decoration: InputDecoration(
+              hintText: 'Typ een opdracht...',
+              hintStyle:
+                  RaakTextStyles.body.copyWith(color: RaakColors.textGrey),
+              filled: true,
+              fillColor: RaakColors.voidBlack,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide:
+                    const BorderSide(color: RaakColors.borderDark),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide:
+                    const BorderSide(color: RaakColors.borderDark),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide:
+                    const BorderSide(color: RaakColors.volt, width: 2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: GestureDetector(
+              onTap: () {
+                final text = _controller.text.trim();
+                if (text.isNotEmpty) {
+                  widget.notifier.addCustom(text);
+                  Navigator.pop(context);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: RaakButtonStyle.primary(),
+                alignment: Alignment.center,
+                child: Text(
+                  'TOEVOEGEN',
+                  style: RaakTextStyles.body.copyWith(
+                    color: RaakColors.textDark,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
