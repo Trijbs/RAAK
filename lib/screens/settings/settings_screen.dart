@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme.dart';
+import '../../models/dare.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/dare_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -10,6 +12,8 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
+    final dares = ref.watch(dareProvider);
+    final dareNotifier = ref.read(dareProvider.notifier);
 
     return Scaffold(
       backgroundColor: RaakColors.voidBlack,
@@ -70,10 +74,41 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ]),
           const SizedBox(height: 24),
+          // Dares section
+          Text('OPDRACHTEN', style: RaakTextStyles.caption),
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: RaakColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: RaakColors.borderDark),
+            ),
+            child: Column(
+              children: [
+                ...dares.map((dare) => _DareListTile(
+                  dare: dare,
+                  onToggle: () => dareNotifier.toggle(dare.id),
+                  onDelete: dare.isCustom
+                      ? () => dareNotifier.deleteCustom(dare.id)
+                      : null,
+                )),
+                const Divider(color: RaakColors.borderDark, height: 1),
+                ListTile(
+                  onTap: () => _showAddDareSheet(context, dareNotifier),
+                  leading: const Icon(Icons.add, color: RaakColors.volt),
+                  title: Text(
+                    'OPDRACHT TOEVOEGEN',
+                    style: RaakTextStyles.body.copyWith(color: RaakColors.volt),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
           _buildSection('OVER', [
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text('RAAK v1.0', style: RaakTextStyles.body),
+              title: Text('RAAK v1.1', style: RaakTextStyles.body),
               subtitle: Text(
                 'Originele party app — geen kopie',
                 style: RaakTextStyles.caption,
@@ -82,6 +117,87 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ]),
         ],
+      ),
+    );
+  }
+
+  void _showAddDareSheet(BuildContext context, DareNotifier notifier) {
+    final controller = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: RaakColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('NIEUWE OPDRACHT', style: RaakTextStyles.caption),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLength: 120,
+              autofocus: true,
+              style: RaakTextStyles.body,
+              decoration: InputDecoration(
+                hintText: 'Typ een opdracht...',
+                hintStyle:
+                    RaakTextStyles.body.copyWith(color: RaakColors.textGrey),
+                filled: true,
+                fillColor: RaakColors.voidBlack,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      const BorderSide(color: RaakColors.borderDark),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      const BorderSide(color: RaakColors.borderDark),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      const BorderSide(color: RaakColors.volt, width: 2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: GestureDetector(
+                onTap: () {
+                  final text = controller.text.trim();
+                  if (text.isNotEmpty) {
+                    notifier.addCustom(text);
+                    Navigator.pop(context);
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: RaakButtonStyle.primary(),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'TOEVOEGEN',
+                    style: RaakTextStyles.body.copyWith(
+                      color: RaakColors.textDark,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -116,6 +232,46 @@ class SettingsScreen extends ConsumerWidget {
       value: value,
       activeColor: RaakColors.volt,
       onChanged: onChanged,
+    );
+  }
+}
+
+class _DareListTile extends StatelessWidget {
+  final Dare dare;
+  final VoidCallback onToggle;
+  final VoidCallback? onDelete;
+
+  const _DareListTile({
+    required this.dare,
+    required this.onToggle,
+    this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      title: Text(
+        dare.text,
+        style: RaakTextStyles.body.copyWith(
+          fontSize: 14,
+          color: dare.isEnabled ? RaakColors.textWhite : RaakColors.textGrey,
+        ),
+      ),
+      leading: Switch(
+        value: dare.isEnabled,
+        activeColor: RaakColors.volt,
+        onChanged: (_) => onToggle(),
+      ),
+      trailing: onDelete != null
+          ? IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  color: RaakColors.textGrey),
+              onPressed: onDelete,
+            )
+          : const Icon(Icons.lock_outline,
+              color: RaakColors.borderDark, size: 16),
     );
   }
 }
